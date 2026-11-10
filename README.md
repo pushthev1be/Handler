@@ -33,6 +33,24 @@ No Docker or Supabase needed locally. The same migrations run on embedded Postgr
 | `VOYAGE_API_KEY` | Uses Voyage embeddings instead of the deterministic local hashing embedder |
 | `DATABASE_URL` | Uses Postgres or Supabase instead of PGlite (apply migrations with `supabase db push`) |
 
+### Run against a local Supabase Postgres (optional)
+
+PGlite is the default. To use a real Supabase Postgres instead (needs Docker and the [Supabase CLI](https://supabase.com/docs/guides/local-development)):
+
+```bash
+npm install
+supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+cp .env.example .env.local     # DATABASE_URL -> the local Postgres below
+npm run dev                    # the app seeds the demo clients on first start
+```
+
+- `supabase/config.toml` is committed. Ports are in the 553xx range (Postgres `55322`) so it can run next to another Supabase project on the default 543xx ports.
+- The `-x` list starts the database only. Handler talks to Postgres directly (`DATABASE_URL`) and does its own role switching, so Auth, REST and Studio are not needed. Remove names from the list to enable them.
+- `supabase start` applies `supabase/migrations/` itself. The Supabase roles already exist, so `db/supabase-roles.sql` is not used on this path.
+- The credentials in `.env.example` are the CLI's local-only defaults (`postgres:postgres`), not secrets. Never point this at a hosted project without changing them.
+- `supabase stop` shuts it down; add `--no-backup` to also drop the data.
+- To reset: `supabase db reset`, then restart `npm run dev` to reseed.
+
 `npx tsx scripts/demo-orders.ts` drafts sample orders through the MCP server, so the approval flow can be tried without an API key.
 
 ### Use the MCP server from Claude Desktop or Claude Code
