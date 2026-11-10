@@ -1,0 +1,37 @@
+{
+  "name": "handler",
+  "version": "0.1.0",
+  "description": "Client-isolated AI assistant for pharma materials fulfillment",
+  "scripts": {
+    "test": "vitest run",
+    "eval": "tsx --env-file-if-exists=.env.local evals/run.ts",
+    "typecheck": "tsc -p . && tsc -p web",
+    "dev": "tsx --env-file-if-exists=.env.local scripts/dev.ts",
+    "mcp": "tsx src/mcp/stdio.ts",
+    "build:web": "vite build --config web/vite.config.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@electric-sql/pglite-pgvector": "^0.0.17",
+    "@hono/node-server": "^2.1.6",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "hono": "^4.13.17",
+    "pg": "^8.23.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
+  },
+  "private": "true"
+}

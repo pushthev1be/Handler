@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+    env:
+      META_API_KEY: ${{ secrets.META_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:web
+
+      # Deterministic gates (retrieval accuracy, cross-client leaks, stale material).
+      # Always runs; no secrets required. Fails the build on any leak or stale result.
+      - name: Evals (deterministic)
+        run: npm run eval -- --no-llm
+
+      # End-to-end agent evals against the Meta model. Runs only when the secret is configured
+      # (never on pull requests from forks, which don't receive secrets).
+      - name: Evals (agent, end to end)
+        if: ${{ env.META_API_KEY != '' }}
+        run: npm run eval
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: evals/results/latest.json
