@@ -16,11 +16,20 @@ export interface SeedDoc {
   body: string;
 }
 
+export interface SeedStock {
+  job_code: string;
+  location: string;
+  on_hand: number;
+  reorder_point: number;
+}
+
 export interface SeedClient {
   slug: string;
   name: string;
   product: string;
   docs: SeedDoc[];
+  /** Warehouse stock. Includes stock of expired / withdrawn materials: it exists, but must not ship. */
+  stock: SeedStock[];
 }
 
 export const catalog: SeedClient[] = [
@@ -65,6 +74,12 @@ export const catalog: SeedClient[] = [
         body: "Withdrawn by medical-legal review. Zelvantra travel kit insert, revised cooler guidance.",
       },
     ],
+    stock: [
+      { job_code: "NWT-ZEL-0101", location: "MEM-A-01-03", on_hand: 1200, reorder_point: 200 },
+      { job_code: "NWT-ZEL-0102", location: "MEM-A-01-07", on_hand: 85, reorder_point: 100 },
+      { job_code: "NWT-ZEL-0103", location: "MEM-Q-02-01", on_hand: 640, reorder_point: 0 },
+      { job_code: "NWT-ZEL-0105", location: "MEM-Q-02-02", on_hand: 300, reorder_point: 0 },
+    ],
   },
   {
     slug: "halcyon",
@@ -103,6 +118,12 @@ export const catalog: SeedClient[] = [
         body: "DRAFT. Desk flip chart for nurse educators covering Ostravel counselling points.",
       },
     ],
+    stock: [
+      { job_code: "HLC-OST-2201", location: "MEM-B-03-02", on_hand: 900, reorder_point: 150 },
+      { job_code: "HLC-OST-2202", location: "MEM-B-03-05", on_hand: 4000, reorder_point: 500 },
+      { job_code: "HLC-OST-2203", location: "MEM-B-04-01", on_hand: 150, reorder_point: 50 },
+      { job_code: "HLC-OST-2204", location: "MEM-Q-02-03", on_hand: 75, reorder_point: 0 },
+    ],
   },
   {
     slug: "meridian",
@@ -140,6 +161,12 @@ export const catalog: SeedClient[] = [
         body: "Cardivane pharmacy counter display with tear-off patient leaflets. Heavy item, ships flat.",
         max_order_qty: 20,
       },
+    ],
+    stock: [
+      { job_code: "MRX-CRD-3301", location: "MEM-C-05-01", on_hand: 2000, reorder_point: 300 },
+      { job_code: "MRX-CRD-3302", location: "MEM-C-05-04", on_hand: 60, reorder_point: 40 },
+      { job_code: "MRX-CRD-3303", location: "MEM-Q-02-04", on_hand: 250, reorder_point: 0 },
+      { job_code: "MRX-CRD-3304", location: "MEM-C-06-09", on_hand: 12, reorder_point: 15 },
     ],
   },
 ];

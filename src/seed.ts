@@ -54,3 +54,29 @@ export async function seed(db: Db, embedder: Embedder, clients: SeedClient[] = c
     }
   }
 }
+
+/**
+ * Receives the demo warehouse stock. Runs as the table owner (warehouse receiving is not a
+ * client or AI capability), is idempotent, and records a receipt for each new item so the
+ * ledger always explains on_hand.
+ */
+export async function seedInventory(db: Db, clients: SeedClient[] = catalog): Promise<void> {
+  for (const c of clients) {
+    const { rows } = await db.query<{ id: string }>("select id from public.clients where slug = $1", [c.slug]);
+    if (!rows[0]) continue;
+    for (const s of c.stock) {
+      const item = await db.query<{ id: string }>(
+        `insert into public.inventory_items (client_id, job_code, location, on_hand, reorder_point)
+         values ($1, $2, $3, $4, $5)
+         on conflict (client_id, job_code) do nothing returning id`,
+        [rows[0].id, s.job_code, s.location, s.on_hand, s.reorder_point],
+      );
+      if (!item.rows[0]) continue;
+      await db.query(
+        `insert into public.inventory_movements (client_id, item_id, kind, quantity, actor)
+         values ($1, $2, 'receipt', $3, 'warehouse receiving (seed)')`,
+        [rows[0].id, item.rows[0].id, s.on_hand],
+      );
+    }
+  }
+}

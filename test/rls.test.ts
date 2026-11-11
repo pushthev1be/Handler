@@ -14,7 +14,7 @@ beforeAll(async () => {
 });
 afterAll(() => f.close());
 
-const TENANT_TABLES = ["public.clients", "public.documents", "public.chunks", "public.orders", "public.audit_log"];
+const TENANT_TABLES = ["public.clients", "public.documents", "public.chunks", "public.orders", "public.audit_log", "public.inventory_items", "public.inventory_movements"];
 
 describe("row-level security", () => {
   for (const slug of SLUGS) {

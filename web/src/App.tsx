@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { api, listClients, opsOverview, type AuditEntry, type ChatResult, type Client, type MetricsResponse, type OpsOverview, type Order, type Turn } from "./api";
+import { api, listClients, opsOverview, type AuditEntry, type ChatResult, type Client, type MetricsResponse, type OpsOverview, type Order, type StockRow, type Turn } from "./api";
 
 const ACCENTS: Record<string, string> = { northwind: "#2563eb", halcyon: "#0d9488", meridian: "#c2410c" };
 const OPS_ACCENT = "#64748b";
@@ -10,7 +10,7 @@ export function App() {
   const [clients, setClients] = useState<Client[]>([]);
   const [client, setClient] = useState("");
   const [user, setUser] = useState("jordan@agency.example");
-  const [tab, setTab] = useState<"orders" | "audit" | "metrics">("orders");
+  const [tab, setTab] = useState<"orders" | "inventory" | "audit" | "metrics">("orders");
   const [view, setView] = useState<"account" | "ops">("account");
   const [refresh, setRefresh] = useState(0);
 
@@ -76,13 +76,14 @@ export function App() {
           <Chat key={client} http={http} clientName={current?.name ?? client} onActivity={bump} />
           <section className="panel">
             <nav className="tabs">
-              {(["orders", "audit", "metrics"] as const).map((t) => (
+              {(["orders", "inventory", "audit", "metrics"] as const).map((t) => (
                 <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-                  {{ orders: "Approvals", audit: "Audit trail", metrics: "Monitoring" }[t]}
+                  {{ orders: "Approvals", inventory: "Inventory", audit: "Audit trail", metrics: "Monitoring" }[t]}
                 </button>
               ))}
             </nav>
             {tab === "orders" && <Orders key={client} http={http} user={user} refresh={refresh} onChange={bump} />}
+            {tab === "inventory" && <Inventory key={client} http={http} refresh={refresh} />}
             {tab === "audit" && <Audit key={client} http={http} refresh={refresh} />}
             {tab === "metrics" && <Monitoring key={client} http={http} refresh={refresh} />}
           </section>
@@ -272,6 +273,54 @@ function SignDialog({ order, decision, user, onClose, onSign }: {
   );
 }
 
+function stockState(r: StockRow): { label: string; cls: string } {
+  if (!r.material_current) return { label: "Not orderable", cls: "failed" };
+  if (r.available <= 0) return { label: "Out of stock", cls: "failed" };
+  if (r.low_stock) return { label: "Low stock", cls: "pending_approval" };
+  return { label: "In stock", cls: "submitted" };
+}
+
+function Inventory({ http, refresh }: { http: ReturnType<typeof api>; refresh: number }) {
+  const [rows, setRows] = useState<StockRow[] | null>(null);
+  useEffect(() => void http.inventory().then(setRows), [http, refresh]);
+  if (!rows) return <div className="panel-body muted">Loading…</div>;
+  const quarantined = rows.filter((r) => !r.material_current && r.on_hand > 0);
+  const low = rows.filter((r) => r.material_current && r.low_stock);
+  return (
+    <div className="panel-body">
+      <p className="muted">
+        Warehouse stock for this client only. The assistant can read it but not change it: stock moves when an order is approved,
+        released if the warehouse rejects it, and shipped when the warehouse reports it.
+      </p>
+      {(low.length > 0 || quarantined.length > 0) && (
+        <div className="chain bad">
+          {low.length > 0 && <>{low.length} low on stock. </>}
+          {quarantined.length > 0 && <>{quarantined.reduce((n, r) => n + r.on_hand, 0)} units of non-current material to review.</>}
+        </div>
+      )}
+      <table className="grid">
+        <thead><tr><th>Material</th><th>Location</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Reorder at</th><th>State</th></tr></thead>
+        <tbody>
+          {rows.map((r) => {
+            const st = stockState(r);
+            return (
+              <tr key={r.job_code} className={r.material_current ? "" : "muted"} title={r.note}>
+                <td><span className="cite">{r.job_code}{r.current_version ? ` v${r.current_version}` : ""}</span><div className="muted">{r.title}</div></td>
+                <td><code>{r.location}</code></td>
+                <td>{r.on_hand}</td>
+                <td>{r.reserved}</td>
+                <td><strong>{r.available}</strong></td>
+                <td>{r.reorder_point || "–"}</td>
+                <td><span className={`status ${st.cls}`}>{st.label}</span></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Audit({ http, refresh }: { http: ReturnType<typeof api>; refresh: number }) {
   const [data, setData] = useState<{ broken_at: string | null; entries: AuditEntry[] } | null>(null);
   useEffect(() => void http.audit().then(setData), [http, refresh]);
@@ -302,6 +351,10 @@ function Audit({ http, refresh }: { http: ReturnType<typeof api>; refresh: numbe
 function summarise(e: AuditEntry): string {
   const d = e.details as Record<string, unknown>;
   if (e.action === "materials.searched") return `"${d.query}" → ${(d.results as string[]).join(", ") || "no results"}`;
+  if (e.action.startsWith("inventory.")) {
+    if (e.action === "inventory.checked") return d.job_code ? `${d.job_code}` : `all stock (${d.items} items)`;
+    return `${d.quantity ?? ""} × ${d.job_code}${d.available !== undefined ? ` · only ${d.available} available` : ""}`;
+  }
   if (e.entity === "order") return `${d.quantity} × ${d.job_code} v${d.doc_version}${d.decided_by ? ` · ${d.decided_by}` : ""}${d.legacy_ref ? ` · ${d.legacy_ref}` : ""}`;
   if (e.action === "assistant.responded") return `${d.model} · ${d.prompt_version} · tools: ${(d.tools as string[]).join(", ") || "none"}`;
   return JSON.stringify(d);
@@ -390,6 +443,27 @@ function OpsView({ user, onOpen }: { user: string; onOpen: (slug: string) => voi
                   <td>{(c.p95_ms / 1000).toFixed(1)}s</td>
                   <td>{c.last_activity ? `${age(c.last_activity)} ago` : "never"}</td>
                   <td><button onClick={() => onOpen(c.slug)}>Open</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h3 className="panel-title">Low stock <span className="muted">· all clients, stock levels only</span></h3>
+        <div className="table-wrap">
+          <table className="grid">
+            <thead><tr><th>Client</th><th>Job code</th><th>Location</th><th>Available</th><th>Reorder at</th></tr></thead>
+            <tbody>
+              {data.low_stock.length === 0 && <tr><td colSpan={5} className="muted">Nothing below its reorder point.</td></tr>}
+              {data.low_stock.map((s) => (
+                <tr key={`${s.client_slug}-${s.job_code}`}>
+                  <td><span className="dot" style={{ background: ACCENTS[s.client_slug] }} />{s.client_name}</td>
+                  <td><code>{s.job_code}</code></td>
+                  <td><code>{s.location}</code></td>
+                  <td><strong>{s.available}</strong></td>
+                  <td>{s.reorder_point}</td>
                 </tr>
               ))}
             </tbody>

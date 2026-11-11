@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withScope, type Db, type Scope } from "../db.js";
 import type { Embedder } from "../embed.js";
 import type { LegacyClient } from "../legacy/client.js";
+import { checkInventory } from "../inventory.js";
 import { searchMaterials } from "../materials.js";
 import { audit, createOrder, createOrderInput, listOrders, OrderError, orderStatus } from "../orders.js";
 
@@ -44,6 +45,24 @@ export function createHandlerMcpServer({ db, embedder, legacy, scope }: McpDeps)
           results: hits.map((h) => `${h.job_code} v${h.version}`),
         });
         return json({ results: hits });
+      }),
+  );
+
+  server.registerTool(
+    "check_inventory",
+    {
+      title: "Check warehouse inventory",
+      description:
+        "Warehouse stock for this client: on hand, reserved, available, reorder point and shelf location. With a job code, one item; without, all of this client's stock. Stock of a material that is no longer current (expired, withdrawn, superseded) is flagged and cannot be ordered. Use before drafting an order.",
+      inputSchema: {
+        job_code: z.string().trim().max(20).optional().describe("Job code like ABC-DEF-1234; omit to list all stock"),
+      },
+    },
+    async ({ job_code }) =>
+      withScope(db, scope, async (tx) => {
+        const stock = await checkInventory(tx, job_code);
+        await audit(tx, scope, "inventory.checked", "inventory", null, { job_code: job_code ?? null, items: stock.length });
+        return json({ stock });
       }),
   );
 

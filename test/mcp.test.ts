@@ -19,9 +19,9 @@ async function connect(slug: Slug) {
 const text = (r: Awaited<ReturnType<Client["callTool"]>>) => (r.content as { text: string }[])[0].text;
 
 describe("MCP server", () => {
-  it("exposes exactly the three tools, none of which accept a client or tenant parameter", async () => {
+  it("exposes exactly the four tools, none of which accept a client or tenant parameter", async () => {
     const { tools } = await (await connect("northwind")).listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["create_order", "order_status", "search_materials"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["check_inventory", "create_order", "order_status", "search_materials"]);
     const schemas = JSON.stringify(tools.map((t) => t.inputSchema));
     expect(schemas).not.toMatch(/client|tenant|account/i);
   });

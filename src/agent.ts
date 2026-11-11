@@ -13,6 +13,7 @@ import type { Runtime } from "./runtime.js";
 
 export const MODEL = process.env.HANDLER_MODEL ?? "muse-spark-1.3";
 const MAX_TURNS = 8;
+const REASONING = (process.env.HANDLER_REASONING ?? "low") as "minimal" | "low" | "medium" | "high";
 
 const promptFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "prompts", "system.v1.md");
 const PROMPT_TEMPLATE = readFileSync(promptFile, "utf8");
@@ -88,7 +89,7 @@ export async function runChat(
         messages,
         tools,
         max_completion_tokens: 16000,
-        reasoning_effort: "medium",
+        reasoning_effort: REASONING,
       });
       const choice = response.choices[0];
 

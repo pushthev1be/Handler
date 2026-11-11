@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { withScope, type Db, type Queryable, type Scope } from "./db.js";
+import { releaseStock, reserveStock, shipStock } from "./inventory.js";
 import { LegacyError, type LegacyClient } from "./legacy/client.js";
 import { explainUnavailable } from "./materials.js";
 
@@ -72,6 +73,15 @@ export async function createOrder(tx: Queryable, scope: Scope, input: CreateOrde
   if (input.quantity > docs[0].max_order_qty) {
     throw new OrderError(`Quantity ${input.quantity} exceeds the per-order limit of ${docs[0].max_order_qty} for ${input.job_code}.`);
   }
+  // Soft check so the user hears about shortages up front; the binding check is reserve_stock at approval.
+  const { rows: stock } = await tx.query<{ available: number }>(
+    "select available from app.inventory_status where job_code = $1",
+    [input.job_code],
+  );
+  if (!stock[0]) throw new OrderError(`${input.job_code} has no stock on record at the warehouse.`);
+  if (stock[0].available < input.quantity) {
+    throw new OrderError(`Only ${stock[0].available} of ${input.job_code} available at the warehouse; ${input.quantity} requested.`);
+  }
   const { rows } = await tx.query<Order>(
     `insert into public.orders (client_id, document_id, job_code, doc_version, quantity, ship_to, notes, requested_by)
      values ($1, $2, $3, 0, $4, $5, $6, $7)
@@ -97,11 +107,15 @@ export async function orderStatus(tx: Queryable, legacy: LegacyClient, id: strin
   const order = await getOrder(tx, id);
   if (!order) return null;
   if (!order.legacy_ref) return { order, warehouse: null };
+  let warehouse;
   try {
-    return { order, warehouse: await legacy.getStatus(order.legacy_ref) };
+    warehouse = await legacy.getStatus(order.legacy_ref);
   } catch (err) {
     return { order, warehouse: null, warehouse_error: (err as Error).message };
   }
+  // The warehouse says it shipped: reflect that in stock (idempotent, audited in the database).
+  if (warehouse.status === "SHIPPED") await shipStock(tx, order.id);
+  return { order, warehouse };
 }
 
 export interface Decision {
@@ -132,6 +146,16 @@ export async function decideOrder(db: Db, scope: Scope, legacy: LegacyClient, id
   });
   if (signed.status === "rejected") return signed;
 
+  // Binding stock check. Reserved before the warehouse call so two approvals cannot both claim the last units.
+  const reserved = await withScope(db, scope, (tx) => reserveStock(tx, signed.id));
+  if (!reserved) {
+    return withScope(db, scope, async (tx) => {
+      const { rows } = await tx.query<Order>(`update public.orders set status = 'failed' where id = $1 returning ${ORDER_COLS}`, [id]);
+      await audit(tx, scope, "legacy.rejected", "order", id, { error: "insufficient stock at approval time" });
+      return rows[0];
+    });
+  }
+
   const account = await withScope(db, scope, async (tx) =>
     (await tx.query<{ legacy_account: string }>("select legacy_account from public.clients")).rows[0].legacy_account,
   );
@@ -149,7 +173,10 @@ export async function decideOrder(db: Db, scope: Scope, legacy: LegacyClient, id
       `update public.orders set status = $2, legacy_ref = $3 where id = $1 returning ${ORDER_COLS}`,
       [id, ref ? "submitted" : "failed", ref],
     );
-    if (failure) await audit(tx, scope, "legacy.rejected", "order", id, { error: failure });
+    if (failure) {
+      await releaseStock(tx, id);
+      await audit(tx, scope, "legacy.rejected", "order", id, { error: failure });
+    }
     return rows[0];
   });
 }

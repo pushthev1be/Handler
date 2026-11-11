@@ -1,7 +1,7 @@
 import { clientBySlug, openDb, type Db } from "./db.js";
 import { defaultEmbedder, type Embedder } from "./embed.js";
 import { legacyClient, type LegacyClient } from "./legacy/client.js";
-import { seed } from "./seed.js";
+import { seed, seedInventory } from "./seed.js";
 
 export interface Runtime {
   db: Db;
@@ -18,6 +18,7 @@ export async function bootstrap(opts: { legacyUrl?: string; db?: Db; embedder?: 
     [embedder.model],
   );
   if (rows[0].n === 0) await seed(db, embedder);
+  await seedInventory(db);
   const legacy = legacyClient(opts.legacyUrl ?? process.env.LEGACY_URL ?? "http://127.0.0.1:7070");
   return { db, embedder, legacy };
 }

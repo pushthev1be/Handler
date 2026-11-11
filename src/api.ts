@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { runChat } from "./agent.js";
 import { withOps, withScope } from "./db.js";
+import { checkInventory, lowStockAlerts } from "./inventory.js";
 import { attentionQueue, clientHealth, lastEval, recentActivity } from "./ops.js";
 import { decideOrder, listOrders, OrderError } from "./orders.js";
 import { scopeFor, type Runtime } from "./runtime.js";
@@ -71,6 +72,11 @@ export function createApi(rt: Runtime) {
     return c.json(await decideOrder(rt.db, scope, rt.legacy, c.req.param("id"), body));
   });
 
+  app.get("/inventory", async (c) => {
+    const { scope } = await who(c);
+    return c.json(await withScope(rt.db, scope, (tx) => checkInventory(tx)));
+  });
+
   app.get("/audit", async (c) => {
     const { scope } = await who(c);
     return c.json(
@@ -117,6 +123,7 @@ export function createApi(rt: Runtime) {
         clients: await clientHealth(tx),
         queue: await attentionQueue(tx),
         activity: await recentActivity(tx),
+        low_stock: await lowStockAlerts(tx),
       }))),
       eval: lastEval(),
     });

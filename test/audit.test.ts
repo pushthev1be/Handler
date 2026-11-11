@@ -23,7 +23,7 @@ describe("audit trail", () => {
         "select action, actor, details from public.audit_log where entity = 'order' order by id",
       ),
     );
-    expect(rows.map((r) => r.action)).toEqual(["order.created", "order.approved", "order.submitted"]);
+    expect(rows.map((r) => r.action)).toEqual(["order.created", "order.approved", "inventory.reserved", "order.submitted"]);
     expect(rows[1].details).toMatchObject({ decided_by: "Pat Lee", approval_meaning: "Approved for fulfillment" });
     expect(rows[0].actor).toBe("tester@northwind");
   });

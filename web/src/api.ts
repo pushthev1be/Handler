@@ -17,6 +17,11 @@ export interface AuditEntry {
   id: string; occurred_at: string; actor: string; action: string; entity: string; entity_id: string | null;
   details: Record<string, unknown>; hash: string;
 }
+export interface StockRow {
+  job_code: string; title: string | null; location: string; on_hand: number; reserved: number; available: number;
+  reorder_point: number; low_stock: boolean; material_current: boolean; current_version: number | null;
+  max_order_qty: number | null; note?: string;
+}
 export interface MetricsResponse {
   summary: { requests: number; cost_usd: number; tokens: number; p50_ms: number; p95_ms: number };
   requests: (Metrics & { created_at: string; request_id: string; tool_calls: { name: string }[] })[];
@@ -38,6 +43,7 @@ export function api(client: string, user: string) {
     decide: (id: string, body: { decision: "approve" | "reject"; signer: string; meaning: string; reason?: string }) =>
       call<Order>(`/orders/${id}/decision`, { method: "POST", body: JSON.stringify(body) }),
     audit: () => call<{ broken_at: string | null; entries: AuditEntry[] }>("/audit"),
+    inventory: () => call<StockRow[]>("/inventory"),
     metrics: () => call<MetricsResponse>("/metrics"),
   };
 }
@@ -50,6 +56,7 @@ export interface OpsOverview {
   queue: (Pick<Order, "id" | "job_code" | "doc_version" | "quantity" | "ship_to" | "status" | "requested_by" | "created_at">
     & { client_slug: string; client_name: string })[];
   activity: (Pick<AuditEntry, "id" | "occurred_at" | "actor" | "action" | "entity" | "details"> & { client_slug: string; client_name: string })[];
+  low_stock: { client_slug: string; client_name: string; job_code: string; location: string; on_hand: number; available: number; reorder_point: number }[];
   eval: { passed: boolean; ran_at: string; dataset_version: string; prompt_version: string; gates: { name: string; ok: boolean; shown: string }[] } | null;
 }
 
